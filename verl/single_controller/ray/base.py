@@ -451,9 +451,13 @@ def create_colocated_worker_cls(class_dict: dict[str, RayClassWithInitArgs]):
 
     # now monkey-patch the methods from inner class to WorkerDict
     for key, user_defined_cls in cls_dict.items():
+        # 因为多个类到一个ray进程中，将每个类上的ray remote给去掉
         user_defined_cls = _unwrap_ray_remote(user_defined_cls)
+        # 将每个类上的方法绑定到WorkerDict中, 方法是在方法名前加上类名作为前缀
         _bind_workers_method_to_parent(WorkerDict, key, user_defined_cls)
 
+    # 这个方法将多个类放在WorkerDict中，然后用ray初始化，这样多个类可以对应一个ray进程
+    # RayClassWithInitArgs可以保存构造参数，用于延迟初始化
     remote_cls = ray.remote(WorkerDict)
     remote_cls = RayClassWithInitArgs(cls=remote_cls)
     return remote_cls

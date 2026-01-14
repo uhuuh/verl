@@ -166,11 +166,15 @@ def main_task(config):
         role_worker_mapping[Role.RewardModel] = RewardModelWorker
         mapping[Role.RewardModel] = global_pool_id
 
+    # 这里两个奖励函数，一个是训练时用的，一个是验证时用的
     reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0)
 
     # Note that we always use function-based RM for validation
     val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1)
 
+    # 维护两个映射表，一个是资源池id到资源池的映射，一个是角色到到资源id的映射
+    # 该文件中目前只有一个资源池，所有角色都使用这一个资源池
+    # 资源池是多个节点上的多个gpu组成的列表，列表中的每个元素是一个节点上的gpu数量
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 
     trainer = RayPPOTrainer(config=config,

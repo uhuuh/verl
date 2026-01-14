@@ -1,0 +1,32 @@
+
+
+
+
+
+- WorkerHelper: 获取next ip和port
+-- Worker: 负责在 Ray actor 进程启动时，根据环境变量完成分布式 rank / master 信息的注册与广播，并把这些信息写入环境变量，供 Megatron / torch.distributed 使用
+--- MegatronWorker 回去megatron分布式信息
+---- ActorRolloutRefWorker
+---- CriticWorker
+---- RewardModelWorker
+
+Worker 流程
+Ray creates actor process
+   │
+   ├─ __new__
+   │    ├─ rank 0 → 注册 master
+   │    └─ 写 MASTER_ADDR/PORT
+   │
+   ├─ __init__
+   │    ├─ 读取 env
+   │    ├─ 构造 WorkerMeta
+   │    └─ 写回 env
+   │
+   └─ worker ready
+
+
+- WorkerGroup 检查是否所有worker存活，将worker方法绑定到WorkerGroup中
+-- MegatronWorkerGroup(RayWorkerGroup) 和 RayWorkerGroup
+--- MegatronRayWorkerGroup 初始化megatron
+
+MegatronRayWorkerGroup 持有worker dict和resource_pool

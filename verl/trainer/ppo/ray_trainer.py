@@ -228,6 +228,7 @@ class RayPPOTrainer(object):
             if config.algorithm.kl_ctrl.type == 'fixed':
                 self.kl_ctrl = core_algos.FixedKLController(kl_coef=config.algorithm.kl_ctrl.kl_coef)
             elif config.algorithm.kl_ctrl.type == 'adaptive':
+                #  根据当前 KL 偏差，动态调整 KL penalty 系数，让训练“既不跑太远，也不太保守”
                 assert config.algorithm.kl_ctrl.horizon > 0, f'horizon must be larger than 0. Got {config.critic.kl_ctrl.horizon}'
                 self.kl_ctrl = core_algos.AdaptiveKLController(init_kl_coef=config.algorithm.kl_ctrl.kl_coef,
                                                                target_kl=config.algorithm.kl_ctrl.target_kl,
@@ -340,6 +341,8 @@ class RayPPOTrainer(object):
         # create actor and rollout
         if self.hybrid_engine:
             resource_pool = self.resource_pool_manager.get_resource_pool(Role.ActorRollout)
+            # RayClassWithInitArgs 保存构造时参数到self中，还不清楚这个有什么用
+            # actor_rollout_cls 维护一个资源池到角色类的映射
             actor_rollout_cls = RayClassWithInitArgs(cls=self.role_worker_mapping[Role.ActorRollout],
                                                      config=self.config.actor_rollout_ref,
                                                      role='actor_rollout')
