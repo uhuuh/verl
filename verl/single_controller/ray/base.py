@@ -221,6 +221,7 @@ class RayWorkerGroup(WorkerGroup):
         world_size = resource_pool.world_size
         self._world_size = world_size
         # cia.add_kwarg("_world_size", world_size)
+        # 使用放置组方式申明使用的资源，总数为1，每个rank使用总数分支一的资源
         num_gpus = 1 / resource_pool.max_collocate_count
 
         rank = -1
@@ -256,14 +257,14 @@ class RayWorkerGroup(WorkerGroup):
                     ray_cls_with_init.update_options({'lifetime': 'detached'})
 
                 # create a worker
-                worker = ray_cls_with_init(placement_group=pg,
+                worker = ray_cls_with_init(placement_group=pg, # 这里实际进行worker的初始化
                                            placement_group_bundle_idx=local_rank,
                                            use_gpu=use_gpu,
                                            num_gpus=num_gpus)
                 self._workers.append(worker)
                 self._worker_names.append(name)
 
-                if rank == 0:
+                if rank == 0: # TODO
                     register_center_actor = None
                     for _ in range(120):
                         if f"{self.name_prefix}_register_center" not in list_named_actors():
@@ -422,6 +423,8 @@ def create_colocated_worker_cls(class_dict: dict[str, RayClassWithInitArgs]):
     This function should return a class instance that delegates the calls to every 
     cls in cls_dict
     """
+    # cls中的cls需要被ray remote装饰过，确保所有cls的基类一样
+    # 并且这个基类的init方法是无参的
     cls_dict = {}
     init_args_dict = {}
     worker_cls = None
@@ -453,6 +456,7 @@ def create_colocated_worker_cls(class_dict: dict[str, RayClassWithInitArgs]):
     for key, user_defined_cls in cls_dict.items():
         # 因为多个类到一个ray进程中，将每个类上的ray remote给去掉
         user_defined_cls = _unwrap_ray_remote(user_defined_cls)
+        # 为什么要bind到parent，当调用时直接从worke dict中查找不行吗？
         # 将每个类上的方法绑定到WorkerDict中, 方法是在方法名前加上类名作为前缀
         _bind_workers_method_to_parent(WorkerDict, key, user_defined_cls)
 

@@ -348,7 +348,7 @@ class MegatronVLLMShardingManager(BaseShardingManager):
         # broadcast the parameters from pp rank to other ranks
         self.module.allgather_params()
         # obtain name to parameters in pp/vpp
-        params = self.module.get_all_params()
+        params = self.module.get_all_params() # 协作模式下，actor有pp和tp，但是infer只有tp，为了sync weight需要先汇聚pp
 
         # bind the params to inference engine
         self.params = normalize_pp_vpp_params(params=params,
@@ -377,7 +377,7 @@ class MegatronVLLMShardingManager(BaseShardingManager):
 
     def preprocess_data(self, data: DataProto) -> DataProto:
         # prompts are identical for each training tp. We select for each inference tp
-        micro_dp_size = get_micro_data_parallel_world_size()
+        micro_dp_size = get_micro_data_parallel_world_size() # TODO
         micro_dp_rank = get_micro_data_parallel_rank()
 
         # broadcast from tp=0 to other tp ranks

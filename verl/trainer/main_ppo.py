@@ -145,7 +145,7 @@ def main_task(config):
         global_pool_id: [config.trainer.n_gpus_per_node] * config.trainer.nnodes,
     }
     mapping = {
-        Role.ActorRollout: global_pool_id,
+        Role.ActorRollout: global_pool_id, # 这里actor和rollout不能分块吗？只能在一个资源池中
         Role.Critic: global_pool_id,
         Role.RefPolicy: global_pool_id,
     }

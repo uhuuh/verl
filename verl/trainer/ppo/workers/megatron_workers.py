@@ -99,6 +99,7 @@ class ActorRolloutRefWorker(MegatronWorker):
 
         self.role = role
         assert self.role in ['actor', 'rollout', 'ref', 'actor_rollout', 'actor_rollout_ref']
+        # actor_rollout_ref 这个是如何实现的
 
         self._is_actor = self.role in ['actor', 'actor_rollout', 'actor_rollout_ref']
         self._is_rollout = self.role in ['rollout', 'actor_rollout', 'actor_rollout_ref']
@@ -306,6 +307,8 @@ class ActorRolloutRefWorker(MegatronWorker):
                                           actor_optimizer_config=self.actor_optim_config)
 
         if self._is_rollout:
+            # 高效weight sync方式，当trainer和infer切分方式不同时，尽量端到端传输，不经过第三方buffer
+            # 尤其可以关注一个pp和vpp的处理
             self.rollout, self.sharding_manager = self._build_rollout()
 
         if self._is_ref:
@@ -350,7 +353,7 @@ class ActorRolloutRefWorker(MegatronWorker):
         prompts.batch = prompts.batch.cuda()
         meta_info = {'eos_token_id': self.tokenizer.eos_token_id, 'pad_token_id': self.tokenizer.pad_token_id}
         prompts.meta_info.update(meta_info)
-        with self.sharding_manager:
+        with self.sharding_manager: # TODO 如果在分离模式下，又应该怎么同步权重
             log_gpu_memory_usage('After entering sharding manager', logger=logger)
 
             prompts = self.sharding_manager.preprocess_data(prompts)
