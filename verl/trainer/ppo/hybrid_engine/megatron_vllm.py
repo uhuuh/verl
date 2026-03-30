@@ -402,7 +402,7 @@ class MegatronVLLMShardingManager(BaseShardingManager):
                                                 dim=0)
 
         # all gather batch among pp group
-        if meta_info.get('allgather_pp_output', True):
+        if meta_info.get('allgather_pp_output', True): # 如果没有设置，默认为True
             data.batch = allgather_dict_tensors(data.batch.contiguous(),
                                                 size=mpu.get_pipeline_model_parallel_world_size(),
                                                 group=mpu.get_pipeline_model_parallel_group(),

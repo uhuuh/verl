@@ -346,6 +346,9 @@ class ActorRolloutRefWorker(MegatronWorker):
         torch.cuda.empty_cache()
         return output
 
+    # 这个函数是vllm负责，那么为什么使用megatron的pp和dp，worker group的并行指的是megatron的吗？
+    # vllm只支持tp，megatron的pp和tp，pp会变成dp
+    # 这种方式收集所有rank的输入和输出，效率是不是有点低
     @register(dispatch_mode=Dispatch.MEGATRON_PP_AS_DP_PROTO)
     def generate_sequences(self, prompts: DataProto):
         assert self._is_rollout
@@ -377,12 +380,15 @@ class ActorRolloutRefWorker(MegatronWorker):
         log_gpu_memory_usage('After recompute log prob', logger=logger)
         return output
 
+    # 分发：每个 DP rank 的 chunk 会广播到该 DP 组内的所有 TP/PP rank
+    # 收集：只从 tp=0 和 pp=last 的 rank 收集输出
     @register(dispatch_mode=Dispatch.MEGATRON_COMPUTE_PROTO)
     def compute_ref_log_prob(self, data: DataProto):
         data = data.to('cuda')
 
         assert self._is_ref
         if self._is_offload_param:
+            # 这里weight没有聚合到buffer中，可能效率稍低
             load_megatron_param_and_grad(self.ref_module, torch.cuda.current_device(), self._is_offload_grad)
 
         micro_batch_size = self.config.rollout.log_prob_micro_batch_size

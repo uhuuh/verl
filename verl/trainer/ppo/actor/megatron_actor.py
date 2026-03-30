@@ -233,6 +233,7 @@ class MegatronPPOActor(BasePPOActor):
             batch_size = data.meta_info['micro_batch_size']
         else:
             batch_size = self.config.ppo_micro_batch_size
+        # 这里切分micro batch
         batches = split_dict_tensor_into_batches(data.batch, batch_size=batch_size)
         # compute input shapes for pp stages
         input_shapes = compute_transformers_input_shapes(

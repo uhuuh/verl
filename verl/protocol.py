@@ -103,6 +103,23 @@ class DataProto:
     TensorDict allows you to manipulate a dictionary of Tensors like a single Tensor. Ideally, the tensors with the
     same batch size should be put inside batch.
     """
+    '''
+  ┌───────────────┬──────────┬───────────────────────┬────────────────────────────┐    
+  │     字段      │   类型   │         说明          │            示例            │
+  ├───────────────┼──────────┼───────────────────────┼────────────────────────────┤    
+  │ batch         │ TensorDi │ 存储具有相同 batch    │ input_ids, attention_mask, │    
+  │               │ ct       │ 维度的 PyTorch 张量   │  log_probs                 │    
+  ├───────────────┼──────────┼───────────────────────┼────────────────────────────┤    
+  │ non_tensor_ba │          │ 存储非张量数据（numpy │ 原始文本字符串、无法张量化 │    
+  │ tch           │ Dict     │  数组，dtype=object） │ 的数据                     │  
+  │               │          │ ，也按 batch 索引     │                            │
+  ├───────────────┼──────────┼───────────────────────┼────────────────────────────┤
+  │               │          │ 存储元数据，不随      │ eos_token_id, temperature, │
+  │ meta_info     │ Dict     │ batch                 │  clip_ratio,               │
+  │               │          │ 维度变化，对整个      │ allgather_pp_output        │
+  │               │          │ batch 统一            │                            │
+  └───────────────┴──────────┴───────────────────────┴────────────────────────────┘
+    '''
     batch: TensorDict = None
     non_tensor_batch: Dict = field(default_factory=dict)
     meta_info: Dict = field(default_factory=dict)

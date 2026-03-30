@@ -50,6 +50,8 @@ todo
 
 **GRPO等算法细节**
 
+**看一下适配vpp做了什么**
+
 **megatron与fsdp之间的区别**
 
 ● 根据代码分析，除了基本的RL训练流程（weight sync、rollout、logp计算、reward、advantage、policy
