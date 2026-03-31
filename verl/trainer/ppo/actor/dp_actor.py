@@ -149,6 +149,7 @@ class DataParallelPPOActor(BasePPOActor):
                 entropy_loss = core_algos.compute_entropy_loss(logits, response_mask)
                 policy_loss = pg_loss - entropy_loss * entropy_coeff
 
+                # 这个之前还没有注意到，反向oom时，如何切分更小的batch来反向更新，同时保持最终效果y一致
                 loss = policy_loss / self.gradient_accumulation
                 loss.backward()
 

@@ -121,6 +121,7 @@ class MegatronPPOCritic(BasePPOCritic):
                                         kl_penalty=self.config.kl_ctrl.kl_penalty_type)  # (batch_size, response_length)
             kld = kld * eos_mask
             beta = self.kl_ctrl.value
+            # ref logp 仅仅用来修正奖励
             rewards = token_level_rewards - beta * kld
 
             # per token kld

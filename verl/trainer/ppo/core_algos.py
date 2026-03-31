@@ -94,13 +94,16 @@ def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torc
         gen_len = token_level_rewards.shape[-1]
 
         for t in reversed(range(gen_len)):
+            # 最后一个token的next val设为0
             nextvalues = values[:, t + 1] if t < gen_len - 1 else 0.0
             delta = token_level_rewards[:, t] + gamma * nextvalues - values[:, t]
             lastgaelam = delta + gamma * lam * lastgaelam
             advantages_reversed.append(lastgaelam)
         advantages = torch.stack(advantages_reversed[::-1], dim=1)
 
+        #  优势函数定义为 A(s) = G(s) - V(s)  所以反推回报就是G(s) = A(s) + V(s)
         returns = advantages + values
+        # 在一个 Batch 中，如果所有的优势值都是正的（虽然可能有些很大有些很小），模型更新会比较慢。通过归一化，强制一半的动作优势为正，一半为负，能极大地稳定梯度更新并加速收敛。
         advantages = verl_F.masked_whiten(advantages, eos_mask)
     return advantages, returns
 
@@ -184,6 +187,7 @@ def compute_value_loss(vpreds, returns, values, eos_mask, cliprange_value):
     vpredclipped = verl_F.clip_by_value(vpreds, values - cliprange_value, values + cliprange_value)
     vf_losses1 = (vpreds - returns)**2
     vf_losses2 = (vpredclipped - returns)**2
+    # 0.5 是为了匹配均方误差求导后的系数
     vf_loss = 0.5 * verl_F.masked_mean(torch.max(vf_losses1, vf_losses2), eos_mask)
     vf_clipfrac = verl_F.masked_mean(torch.gt(vf_losses2, vf_losses1).float(), eos_mask)
     return vf_loss, vf_clipfrac
