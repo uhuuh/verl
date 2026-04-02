@@ -1,221 +1,50 @@
+# veRL (Versatile Reinforcement Learning) 学习笔记
 
-rl训练
 
-- infer 和 trainer 的 weight sync
-- infer rollout
-- train compute old logp
-- ref comptue ref logp
-- reward
-- adv
-- train update policy
+在gpu集群中使用rl算法训练LLM
+rl算法，不同类型需要的模型类型也不同，一般有actor、rollout、ref、reward这四种
+可以抽象出算法、模型、数据这三个基本组件
+算法，控制训练流程，什么时候调用什么模型得到什么数据
+- 各种KL控制器、奖励支持
+模型
+- 支持分离和协作两种模式，不用类型模型可以协作放置在同一组gpu，或者分别放置在不同组gpu上
+- 在gpu集群中，模型一般采用某种分布式执行策略，将参数分配放置在不同gpu上，支持不同的数据分发和收集协议，来适配不同的并行策略
+- 支持不同的训推后端，如rollout、ref、reward只有前向，可以跑在推理引擎上，如actor既有前向又有反向，跑在训练框架上
+- actor和rollout需要参数同步，可以使用协作模式，支持actor和rollout不同并行策略下的参数同步
+- actor跑在训练框架上，支持梯度和优化器参数卸载
+数据
+- 提供基本的聚合和索引功能
+- 由于在gpu集群中，还需要提供按照batch维度切分和合并功能
 
 
-todo
-- 看一下grpo算法的细节，尤其是kl散度控制那一块的内容
-- 看一下当模型在不同资源池中，数据是如何传输的
-- role在分布式环境的创建是借助ray简易实现，这样role需要spmt风格，同时也提供了一个ray group用于给role上的所有rank同时发送消息，另外ray group的消息传递过程中可能涉及消息的聚合和拆分，由于分布式策略的印象
+## 主要组件
 
-在ray中，初始化好资源池后，可以根据类声明需要的资源数量，自动在对应的资源上创建类，同时帮忙处理对象方法调用时的数据输入和返回。
-当一个模型需要多个GPU时，需要创建于GPU数量相等的ray对象，ray对象会自动在空闲GPU上创建，但是调用模型方法时的输入和输出需要手动处理，比如输入传递到几个GPU、返回rank0的输出还是拼接所有rank的输出
+算法层次上使用RayPPOTrainer控制流程，关键函数封装在core_algos文件中，如优势计算和损失函数计算
+模型层次，分为两个维度，一个适配gpu集群，RayWorkerGroup和ResourcePool，一个本身职责，不同类型的子类提供专用接口
+actor和rollout模型协作模式下，通过AllGatherPPModel和MegatronVLLMShardingManager支持各种分布式策略下的自动参数同步
+数据层次上，DataProto
 
-**混杂放置**
-资源池表示一组gpu资源，业务中存在多个模型放置在同一个资源组
+## 代码结构概览
 
-我的方案
-- 创建一个ray对象，分配资源池，传入一个dict，dict中保存模型名字到模型类和初始化参数。该ray对象初始化时，依次初始化内部所有模型，调用方法时传入一个参数表示模型名字，然后选择对应的内部模型执行，或者创建对应模型的包装对象来实现方法调用
 
-当前理解到的方案
-- 创建一个WorkerDict，内部使用一个dict保存多个模型，key是模型名字，value是模型实例，同时将所有模型的方法重新绑定到WorkerDict上，名字修改为模型前缀+实际方法名
-- 创建一个RayWorkerGroup，实际占据资源组，提供spawn方法为每个模型创建实例。在spawn方法中，又以detach方式创建RayWorkerGroup，不分配资源组，复用之前RayWorkerGroup中实际ray对象，去掉模型前缀重新绑定方法
 
-不清楚为啥要搞得这么复杂
+## 混杂放置 (Collocated Workers)
 
-**混杂调用**
-- 模型通常需要放置在一个资源组上，为资源组上的多个GPU分别创建ray对象
-- 模型自身方法声明其调用方式，比如one to all、rank0这种
-- 根据方法的声明自动处理输入和输出，同步还是异步，选择调用的ray对象
+**当前方案：**
+- 创建 `WorkerDict`，内部使用 dict 保存多个模型
+- key 是模型名字，value 是模型实例
+- 将所有模型的方法重新绑定，名称修改为模型前缀+实际方法名
+- 创建 `RayWorkerGroup`，提供 spawn 方法为每个模型创建实例
+- 在 spawn 方法中，以 detach 方式创建 RayWorkerGroup，复用实际的 ray 对象
 
+**混杂调用：**
+- 模型通常需要放置在一个资源组上，为资源组上的多个GPU分别创建 ray 对象
+- 模型自身方法声明其调用方式，比如 one to all、rank0 这种
+- 根据方法的声明自动处理输入和输出，同步还是异步，选择调用的 ray 对象
 
-"3D"指的是 Megatron 的三维并行：TP（张量并行）× PP（流水线并行）× DP（数据并行）
 
-- 权重同步
-- gpu资源分配
-- rollout和后续步骤是否有流水化
+## 十六、TODO
 
-**协同放置下的trainer和infer**
-- 权重
-- cache
-- 并行相关细节
-- 优点是节省现存，缺点是速度慢
+- [ ] Megatron 与 FSDP 之间的区别对比
+- [ ] 适配 vPP 做了什么
 
-**GRPO等算法细节**
-
-**看一下适配vpp做了什么**
-
-**megatron与fsdp之间的区别**
-
-● 根据代码分析，除了基本的RL训练流程（weight sync、rollout、logp计算、reward、advantage、policy
-  update），veRL还实现了以下高级功能：
-
-  高级功能
-
-  1. HybridEngine (3D-HybridEngine)
-
-  位置: verl/trainer/ppo/hybrid_engine/
-
-  功能: 实现actor模型在训练（FSDP/Megatron）和推理（vLLM）之间的高效resharding
-
-  核心优势:
-  - 消除内存冗余
-  - 减少通信开销
-  - 通过BaseShardingManager预处理/后处理数据
-
-  适用场景: 需要频繁在训练和推理之间切换的RLHF，如大规模在线强化学习
-
-  ---
-  2. Flexible Device Placement (Split Placement)
-
-  位置: examples/split_placement/
-
-  功能: 将不同模型映射到不同GPU子集，支持异步并行执行
-
-  实现要点:
-  # 独立资源池映射
-  mapping = {
-      Role.ActorRollout: 'actor_rollout_ref_pool',
-      Role.Critic: 'critic_pool',
-      Role.RefPolicy: 'actor_rollout_ref_pool',
-  }
-  # 通过 blocking=False 实现异步执行
-  @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO, blocking=False)
-
-  适用场景:
-  - 多模型并行训练
-  - 异步actor/critic更新
-  - 资源受限环境下的优化分配
-
-  ---
-  3. Megatron-LM深度集成
-
-  位置: verl/trainer/ppo/workers/megatron_workers.py, verl/single_controller/base/megatron/
-
-  功能: 支持Tensor Parallel、Pipeline Parallel、Sequence Parallel
-
-  并行策略 (decorator.py中定义):
-  - MEGATRON_COMPUTE: Megatron计算模式
-  - MEGATRON_PP_AS_DP: Pipeline Parallel作为Data Parallel
-  - MEGATRON_PP_ONLY: 纯Pipeline Parallel
-
-  适用场景: 超大模型（70B+）的RLHF训练
-
-  ---
-  4. Adaptive KL Controller
-
-  位置: verl/trainer/ppo/core_algos.py
-
-  功能: 自适应KL散度控制，防止策略偏离过大
-
-  算法:
-  class Adaptive: # 自适应调整
-  class Fixed: # 固定系数
-
-  适用场景:
-  - 训练初期的策略不稳定
-  - 需要精细控制策略变化
-
-  ---
-  5. DataProto异步数据传递
-
-  位置: verl/protocol.py 中的 DataProtoFuture
-
-  功能:
-  - 使用Ray ObjectRef实现driver端零数据获取
-  - 支持异步执行和流水线化
-
-  关键方法:
-  - concat(): 合并Future对象
-  - chunk(): 分块用于不同worker
-
-  适用场景:
-  - 高并发训练流水线
-  - 减少driver端通信瓶颈
-
-  ---
-  6. 多种Rollout后端
-
-  位置: verl/trainer/ppo/rollout/
-
-  支持的后端:
-  - vllm_rollout: 高吞吐量推理（支持多版本vllm）
-  - hf_rollout: HuggingFace原生实现
-  - naive: 简单实现用于调试
-
-  适用场景:
-  - vLLM: 生产环境大规模 rollout
-  - HF: 兼容性优先场景
-
-  ---
-  7. FSDP Offloading策略
-
-  位置: verl/utils/fsdp_utils.py, 配置中的fsdp_config
-
-  功能: 精细化控制offloading
-  fsdp_config:
-    param_offload: False    # 参数offload
-    grad_offload: False    # 梯度offload
-    optimizer_offload: False  # 优化器offload
-
-  适用场景:
-  - GPU显存受限
-  - 需要训练大模型但资源有限
-
-  ---
-  8. Collocated Workers
-
-  位置: verl/single_controller/ray/base.py 的 create_colocated_worker_cls
-
-  功能: 在同一进程中启动多个worker，共享资源
-
-  适用场景:
-  - 减少进程间通信开销
-  - 模型间权重共享场景
-
-  ---
-  9. 多种Reward Model支持
-
-  位置: verl/trainer/ppo/reward_model/
-
-  功能:
-  - 函数式reward（如GSM8K的答案匹配）
-  - 基于模型的reward（如FsfairX-LLaMA3-RM）
-
-  适用场景:
-  - 函数式: 数学推理、代码生成等可验证任务
-  - 模型式: 主观评价、自然语言质量评估
-
-  ---
-  复杂场景应用
-
-  ┌───────────────┬───────────────────────────────────────────────────┐
-  │     场景      │                   推荐配置组合                    │
-  ├───────────────┼───────────────────────────────────────────────────┤
-  │ 70B+模型RLHF  │ Megatron-LM + Split Placement + vLLM rollout      │
-  ├───────────────┼───────────────────────────────────────────────────┤
-  │ 单卡/双卡训练 │ FSDP + Offloading + HybridEngine                  │
-  ├───────────────┼───────────────────────────────────────────────────┤
-  │ 在线学习      │ HybridEngine + DataProtoFuture + 异步actor/critic │
-  ├───────────────┼───────────────────────────────────────────────────┤
-  │ 推理密集型    │ vLLM rollout + Tensor Parallel                    │
-  ├───────────────┼───────────────────────────────────────────────────┤
-  │ 多任务RLHF    │ Split Placement + 异步多worker                    │
-  ├───────────────┼───────────────────────────────────────────────────┤
-  │ 资源受限      │ FSDP + 精细化offloading                           │
-  └───────────────┴───────────────────────────────────────────────────┘
-
-  总结
-
-  veRL的核心创新在于Hybrid编程模型（论文《HybridFlow》），结合了：
-  - Single-controller: 集中式控制，数据流清晰
-  - Multi-controller: 分布式执行，高性能
-
-  通过灵活的Worker placement和dispatch模式，可以适配从单卡实验到千卡生产环境的各种RLHF场景。
